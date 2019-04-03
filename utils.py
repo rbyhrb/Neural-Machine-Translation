@@ -89,9 +89,8 @@ def indexesFromSentence(lang, sentence):
 
 def variableFromSentence(lang, sentence, max_length):
 	indexes = indexesFromSentence(lang, sentence)
-	if len(indexes) > max_length-2:
-		indexes = indexes[0:max_length-2]
-	indexes = [SOS_token] + indexes
+	if len(indexes) > max_length-1:
+		indexes = indexes[0:max_length-1]
 	indexes.append(EOS_token)
 	indexes.extend([PAD_token] * (max_length - len(indexes)))
 	result = torch.LongTensor(indexes)

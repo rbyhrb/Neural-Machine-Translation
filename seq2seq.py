@@ -13,6 +13,7 @@ from nltk.translate.bleu_score import sentence_bleu
 import warnings
 
 warnings.filterwarnings("ignore")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class EncoderRNN(nn.Module):
 	def __init__(self, input_size, hidden_size, n_layers=1):
@@ -93,13 +94,11 @@ def train(input_variable, target_variable, encoder, decoder, encoder_optimizer, 
 			input_variable[ei], batch_size, encoder_hidden)
 		encoder_outputs[ei] = encoder_output[0]
 
-	decoder_input = Variable(torch.LongTensor([SOS_token] * batch_size))
-	decoder_input = decoder_input.cuda() if use_cuda else decoder_input
-
+	decoder_input = torch.tensor([[SOS_token] * batch_size], device=device)
 	decoder_hidden = encoder_hidden
 
 	use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
-	# use_teacher_forcing = True
+	#use_teacher_forcing = True
 
 	if use_teacher_forcing:
 		# Teacher forcing: Feed the target as the next input
@@ -129,7 +128,7 @@ def train(input_variable, target_variable, encoder, decoder, encoder_optimizer, 
 
 	return loss / target_length
 
-def trainIters(encoder, decoder, epochs, train_loader, test_loader, lang, max_length, learning_rate=0.01):
+def trainIters(encoder, decoder, epochs, train_loader, test_loader, lang, max_length, learning_rate=0.001):
 	start = time.time()
 
 	encoder_optimizer = optim.SGD(filter(lambda x: x.requires_grad, encoder.parameters()),
@@ -178,7 +177,7 @@ def evaluate(encoder, decoder, loader, lang, max_length):
 				input_variable[ei], batch_size, encoder_hidden)
 			encoder_outputs[ei] = encoder_output[0]
 
-		decoder_input = Variable(torch.LongTensor([SOS_token] * batch_size))
+		decoder_input = Variable(torch.LongTensor([[SOS_token] * batch_size]))
 		decoder_input = decoder_input.cuda() if use_cuda else decoder_input
 		decoder_hidden = encoder_hidden
 
@@ -191,11 +190,9 @@ def evaluate(encoder, decoder, loader, lang, max_length):
 
 		output = output.transpose(0,1)
 		for di in range(output.size()[0]):
-			ignore = [SOS_token, EOS_token, PAD_token]
-			sent = [lang.index2word[int(word)]+' ' for word in output[di] if word not in ignore]
-			y = [lang.index2word[int(word)]+' ' for word in batch_y[di] if word not in ignore]
-			sent = ''.join(sent).strip()
-			y = ''.join(y).strip()
+			ignore = [EOS_token, PAD_token]
+			sent = [lang.index2word[int(word)] for word in output[di] if word not in ignore]
+			y = [[lang.index2word[int(word)] for word in batch_y[di] if word not in ignore]]
 			score += sentence_bleu(y, sent)
 			total += 1
 	print('Test BLEU score '+str(score/total))
@@ -205,13 +202,15 @@ use_cuda = torch.cuda.is_available()
 SOS_token = 0
 EOS_token = 1
 PAD_token = 2
-MAX_LENGTH = 100
+MAX_LENGTH = 80
 teacher_forcing_ratio = 0.5
-hidden_size = 128
-batch_size = 128
+hidden_size = 512
+batch_size = 80
 epochs = 20
+lr = 0.01
 
 input_lang, output_lang, pairs, test_pairs = prepareData('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', 'iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', reverse=True)
+#pairs = pairs[0:10]
 pairs = variablesFromPairs(input_lang, output_lang, pairs, MAX_LENGTH)
 test_pairs = variablesFromPairs(input_lang, output_lang, test_pairs, MAX_LENGTH)
 train_loader = torch.utils.data.DataLoader(pairs, 
@@ -226,5 +225,5 @@ if use_cuda:
 	encoder1 = encoder1.cuda()
 	decoder1 = decoder1.cuda()
 print('Training starts.')
-trainIters(encoder1, decoder1, epochs, train_loader, test_loader, output_lang, MAX_LENGTH)
+trainIters(encoder1, decoder1, epochs, train_loader, test_loader, output_lang, MAX_LENGTH, learning_rate=lr)
 
