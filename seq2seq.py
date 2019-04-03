@@ -149,7 +149,7 @@ def trainIters(encoder, decoder, epochs, train_loader, test_loader, lang, max_le
 
 		print('%s (epoch: %d %d%%)' % (timeSince(start, (epoch+1)/epochs),
 					epoch, (epoch+1)/epochs*100))
-		print('total loss: '+str(print_loss_total))
+		print('total loss: %f'%(float(print_loss_total)))
 		evaluate(encoder, decoder, test_loader, lang, max_length)
 		print()
 
@@ -198,7 +198,7 @@ def evaluate(encoder, decoder, loader, lang, max_length):
 			y = ''.join(y).strip()
 			score += sentence_bleu(y, sent)
 			total += 1
-	print('BLEU score '+str(score/total))
+	print('Test BLEU score '+str(score/total))
 
 
 use_cuda = torch.cuda.is_available()
@@ -209,7 +209,7 @@ MAX_LENGTH = 100
 teacher_forcing_ratio = 0.5
 hidden_size = 128
 batch_size = 128
-epochs = 100
+epochs = 20
 
 input_lang, output_lang, pairs, test_pairs = prepareData('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', 'iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', reverse=True)
 pairs = variablesFromPairs(input_lang, output_lang, pairs, MAX_LENGTH)
