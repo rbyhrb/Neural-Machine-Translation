@@ -144,6 +144,7 @@ def trainIters(encoder, decoder, epochs, train_loader, test_loader, lang, max_le
 	criterion = nn.NLLLoss()
 
 	for epoch in range(epochs):
+		decoder.train()
 		print_loss_total = 0
 		for batch_x, batch_y in train_loader:
 			loss = train(batch_x, batch_y, encoder,
@@ -153,6 +154,7 @@ def trainIters(encoder, decoder, epochs, train_loader, test_loader, lang, max_le
 		print('%s (epoch: %d %d%%)' % (timeSince(start, (epoch+1)/epochs),
 					epoch, (epoch+1)/epochs*100))
 		print('total loss: %f'%(float(print_loss_total)))
+		decoder.eval()
 		evaluate(encoder, decoder, test_loader, lang, max_length)
 		print()
 
@@ -204,7 +206,7 @@ use_cuda = torch.cuda.is_available()
 SOS_token = 0
 EOS_token = 1
 PAD_token = 2
-MAX_LENGTH = 80
+MAX_LENGTH = 50
 teacher_forcing_ratio = 0.5
 hidden_size = 512
 batch_size = 48
