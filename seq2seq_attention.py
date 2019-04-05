@@ -211,7 +211,7 @@ teacher_forcing_ratio = 0.5
 hidden_size = 512
 batch_size = 48
 epochs = 20
-lr = 0.01
+lr = 0.001
 
 input_lang, output_lang, pairs, test_pairs = prepareData('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', 'iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', reverse=True)
 #pairs = pairs[0:10]

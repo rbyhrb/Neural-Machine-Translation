@@ -5,6 +5,8 @@ import math
 import random
 import unicodedata
 from io import open
+import nltk
+nltk.download('punkt')
 
 SOS_token = 0
 EOS_token = 1
@@ -20,7 +22,8 @@ class Lang:
 		self.n_words = 3  # Count SOS and EOS
 
 	def addSentence(self, sentence):
-		for word in sentence.split(' '):
+		#for word in sentence.split(' '):
+		for word in nltk.word_tokenize(sentence):
 			self.addWord(word)
 
 	def addWord(self, word):
@@ -36,7 +39,7 @@ class Lang:
 # Lowercase, trim
 def normalizeString(s):
 	s = s.lower().strip()
-	s = re.sub(r"([,:\".!\?])", r" \1", s)
+	#s = re.sub(r"([,:\".!\?])", r" \1", s)
 	return s
 
 
@@ -84,7 +87,8 @@ def prepareData(lang1, lang2, test1, test2, reverse=False):
 
 
 def indexesFromSentence(lang, sentence):
-	return [lang.word2index[word] for word in sentence.split(' ')]
+	#return [lang.word2index[word] for word in sentence.split(' ')]
+	return [lang.word2index[word] for word in nltk.word_tokenize(sentence)]
 
 
 def variableFromSentence(lang, sentence, max_length):
