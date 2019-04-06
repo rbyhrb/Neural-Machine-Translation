@@ -91,12 +91,19 @@ def indexesFromSentence(lang, sentence):
 	return [lang.word2index[word] for word in nltk.word_tokenize(sentence)]
 
 
-def variableFromSentence(lang, sentence, max_length):
+def variableFromSentence(lang, sentence, max_length, start=False):
 	indexes = indexesFromSentence(lang, sentence)
-	if len(indexes) > max_length-1:
-		indexes = indexes[0:max_length-1]
-	indexes.append(EOS_token)
-	indexes.extend([PAD_token] * (max_length - len(indexes)))
+	if start:
+		if len(indexes) > max_length-2:
+			indexes = indexes[0:max_length-2]
+		indexes = [SOS_token] + indexes + [EOS_token]
+		indexes.extend([PAD_token] * (max_length - len(indexes)))
+	else:
+		if len(indexes) > max_length-1:
+			indexes = indexes[0:max_length-1]
+		indexes.append(EOS_token)
+		indexes.extend([PAD_token] * (max_length - len(indexes)))
+
 	result = torch.LongTensor(indexes)
 	if use_cuda:
 		return result.cuda()
@@ -104,11 +111,11 @@ def variableFromSentence(lang, sentence, max_length):
 		return result
 
 
-def variablesFromPairs(input_lang, output_lang, pairs, max_length):
+def variablesFromPairs(input_lang, output_lang, pairs, max_length, start=False):
 	res = []
 	for pair in pairs:
-		input_variable = variableFromSentence(input_lang, pair[0], max_length)
-		target_variable = variableFromSentence(output_lang, pair[1], max_length)
+		input_variable = variableFromSentence(input_lang, pair[0], max_length, start)
+		target_variable = variableFromSentence(output_lang, pair[1], max_length, start)
 		res.append((input_variable, target_variable))
 	return res
 
