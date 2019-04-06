@@ -300,15 +300,15 @@ def evaluate(model, loader, lang, max_length):
 SOS_token = 0
 EOS_token = 1
 PAD_token = 2
-MAX_LENGTH = 50
+MAX_LENGTH = 80
 n_hidden = 512
 n_ff_hidden = 2048
 n_heads = 8
 n_layers = 6
-dropout_p = 0.2
+dropout_p = 0.3
 n_epochs = 50
-lr = 1e-3
-batch_size = 48
+lr = 1e-4
+batch_size = 32
 
 input_lang, output_lang, pairs, test_pairs = prepareData('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', 'iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', reverse=True)
 #pairs = pairs[0:10]
