@@ -290,7 +290,7 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 									}, save_file)
 			print("checkpoint saved!")
 		else:
-			lr = lr / 2;
+			lr = lr / DECAY;
 			for param_group in optimizer.param_groups:
 				param_group['lr'] = lr
 		print()
@@ -344,6 +344,7 @@ n_epochs = 50
 lr = 1e-4
 batch_size = 24
 from_scratch = False
+DECAY = 1.5
 SAVE_PATH = 'checkpoints'
 SAVE_NAME = 'transformer.pkl'
 
