@@ -239,8 +239,6 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 	#optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.98), eps=1e-9)
 	optimizer = AdaBound(model.parameters(), lr=lr, final_lr=0.1)
 
-	s_epoch = -1
-
 	if not os.path.exists(SAVE_PATH):
 		os.mkdir(SAVE_PATH)
 	save_file = os.path.join(SAVE_PATH, SAVE_NAME)
@@ -250,15 +248,15 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 			checkpoint = torch.load(save_file)
 			model.load_state_dict(checkpoint['model_state_dict'])
 			lr = checkpoint['lr']
-			optimizer = AdaBound(model.parameters(), lr=lr, final_lr=0.1)
 			optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-			s_epoch = checkpoint['epoch']
+			for param_group in optimizer.param_groups:
+				param_group['lr'] = lr
 			print("load successful!")
 		else:
 			print("load unsuccessful!")
 
 	best_val_bleu = 0
-	for epoch in range(s_epoch+1, n_epochs):
+	for epoch in range(n_epochs):
 
 		model.train()
 		print_loss_total = 0
@@ -286,7 +284,6 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 		if curr_bleu > best_val_bleu:
 			best_val_bleu = curr_bleu
 			torch.save({
-									'epoch': epoch,
 									'model_state_dict': model.state_dict(),
 									'optimizer_state_dict': optimizer.state_dict(),
 									'lr': lr,
@@ -294,7 +291,8 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 			print("checkpoint saved!")
 		else:
 			lr = lr / 2;
-
+			for param_group in optimizer.param_groups:
+				param_group['lr'] = lr
 		print()
 
 def evaluate(model, loader, lang, max_length):
@@ -344,7 +342,7 @@ n_layers = 6
 dropout_p = 0.3
 n_epochs = 50
 lr = 1e-4
-batch_size = 28
+batch_size = 24
 from_scratch = False
 SAVE_PATH = 'checkpoints'
 SAVE_NAME = 'transformer.pkl'
