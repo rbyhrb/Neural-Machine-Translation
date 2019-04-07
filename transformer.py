@@ -13,6 +13,8 @@ from utils import *
 from nltk.translate.bleu_score import sentence_bleu
 import copy
 import warnings
+from adabound import AdaBound
+import os, sys
 
 warnings.filterwarnings("ignore")
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -231,12 +233,32 @@ def create_masks(batch_x, batch_y):
 	target_msk = target_msk & nopeak_mask
 	return source_msk, target_msk
 
-def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, lr):
+def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, lr, from_scratch):
 	start = time.time()
+			
+	#optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.98), eps=1e-9)
+	optimizer = AdaBound(model.parameters(), lr=lr, final_lr=0.1)
 
-	optim = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.98), eps=1e-9)
+	s_epoch = -1
 
-	for epoch in range(n_epochs):
+	if not os.path.exists(SAVE_PATH):
+		os.mkdir(SAVE_PATH)
+	save_file = os.path.join(SAVE_PATH, SAVE_NAME)
+
+	if not from_scratch:
+		if os.path.exists(save_file):
+			checkpoint = torch.load(save_file)
+			model.load_state_dict(checkpoint['model_state_dict'])
+			lr = checkpoint['lr']
+			optimizer = AdaBound(model.parameters(), lr=lr, final_lr=0.1)
+			optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+			s_epoch = checkpoint['epoch']
+			print("load successful!")
+		else:
+			print("load unsuccessful!")
+
+	best_val_bleu = 0
+	for epoch in range(s_epoch+1, n_epochs):
 
 		model.train()
 		print_loss_total = 0
@@ -248,18 +270,31 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 			src_mask, trg_mask = create_masks(batch_x, inputs_y)
 			preds = model(batch_x, inputs_y, src_mask, trg_mask)
 
-			optim.zero_grad()
+			optimizer.zero_grad()
 			loss = F.cross_entropy(preds.view(-1, preds.size(-1)),
 						targets_y, ignore_index=PAD_token)		
 			print_loss_total += loss
 			loss.backward()
-			optim.step()
+			optimizer.step()
 
 		print('%s (epoch: %d %d%%)' % (timeSince(start, (epoch+1)/n_epochs),
 					epoch, (epoch+1)/n_epochs*100))
 		print('total loss: %f'%(float(print_loss_total)))
 		model.eval()
-		evaluate(model, test_loader, target_lang, max_length)
+		curr_bleu = evaluate(model, test_loader, target_lang, max_length)
+
+		if curr_bleu > best_val_bleu:
+			best_val_bleu = curr_bleu
+			torch.save({
+									'epoch': epoch,
+									'model_state_dict': model.state_dict(),
+									'optimizer_state_dict': optimizer.state_dict(),
+									'lr': lr,
+									}, save_file)
+			print("checkpoint saved!")
+		else:
+			lr = lr / 2;
+
 		print()
 
 def evaluate(model, loader, lang, max_length):
@@ -295,6 +330,7 @@ def evaluate(model, loader, lang, max_length):
 			score += sentence_bleu(y, sent)
 			total += 1
 	print('Test BLEU score '+str(score/total))
+	return score/total
 
 
 SOS_token = 0
@@ -308,7 +344,10 @@ n_layers = 6
 dropout_p = 0.3
 n_epochs = 50
 lr = 1e-4
-batch_size = 32
+batch_size = 28
+from_scratch = False
+SAVE_PATH = 'checkpoints'
+SAVE_NAME = 'transformer.pkl'
 
 input_lang, output_lang, pairs, test_pairs = prepareData('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', 'iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', reverse=True)
 #pairs = pairs[0:10]
@@ -328,5 +367,5 @@ for p in model.parameters():
 
 print('Training starts.')
 
-train(model, n_epochs, train_loader, test_loader, output_lang, MAX_LENGTH, lr)
+train(model, n_epochs, train_loader, test_loader, output_lang, MAX_LENGTH, lr, from_scratch)
 
