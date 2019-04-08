@@ -252,6 +252,7 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 			for param_group in optimizer.param_groups:
 				param_group['lr'] = lr
 			print("load successful!")
+			checkpoint = []
 		else:
 			print("load unsuccessful!")
 
@@ -290,9 +291,10 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 									}, save_file)
 			print("checkpoint saved!")
 		else:
-			lr = lr / DECAY;
-			for param_group in optimizer.param_groups:
-				param_group['lr'] = lr
+			if (epoch+1) >= NO_DECAY:
+				lr = lr / DECAY;
+				for param_group in optimizer.param_groups:
+					param_group['lr'] = lr
 		print()
 
 def evaluate(model, loader, lang, max_length):
@@ -342,9 +344,10 @@ n_layers = 6
 dropout_p = 0.3
 n_epochs = 50
 lr = 1e-4
-batch_size = 24
+batch_size = 28
 from_scratch = False
 DECAY = 1.5
+NO_DECAY = 25
 SAVE_PATH = 'checkpoints'
 SAVE_NAME = 'transformer.pkl'
 
