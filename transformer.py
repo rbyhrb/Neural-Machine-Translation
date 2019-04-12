@@ -14,6 +14,7 @@ from nltk.translate.bleu_score import sentence_bleu
 import copy
 import warnings
 from adabound import AdaBound
+from helper import *
 import os, sys
 
 warnings.filterwarnings("ignore")
@@ -351,7 +352,7 @@ NO_DECAY = 25
 SAVE_PATH = 'checkpoints'
 SAVE_NAME = 'transformer.pkl'
 
-input_lang, output_lang, pairs, test_pairs = prepareData('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', 'iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', reverse=True)
+input_lang, output_lang, pairs, test_pairs = prepareData('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', 'iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', reverse=False)
 #pairs = pairs[0:10]
 pairs = variablesFromPairs(input_lang, output_lang, pairs, MAX_LENGTH, start=True)
 test_pairs = variablesFromPairs(input_lang, output_lang, test_pairs, MAX_LENGTH, start=True)
@@ -370,4 +371,3 @@ for p in model.parameters():
 print('Training starts.')
 
 train(model, n_epochs, train_loader, test_loader, output_lang, MAX_LENGTH, lr, from_scratch)
-
