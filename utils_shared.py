@@ -25,7 +25,7 @@ class Lang:
 		return self.sp.decode_ids(codes)
 
 
-def readLangs(lang1, lang2, test_lang1, test_lang2, file_name, vocab_size, reverse):
+def readLangs(lang1, lang2, reverse):
 	print("Reading lines...")
 
 	# Read the files and split into lines
@@ -37,22 +37,12 @@ def readLangs(lang1, lang2, test_lang1, test_lang2, file_name, vocab_size, rever
 	pairs = []
 	pairs = [[lines_lang1[i], lines_lang2[i]] for i in range(len(lines_lang1))]
 
-	# Read the files and split into lines
-	lines_lang1 = open('%s' % (test_lang1), encoding='utf-8').\
-		read().strip().split('\n')
-	lines_lang2 = open('%s' % (test_lang2), encoding='utf-8').\
-		read().strip().split('\n')
-	test_pairs = []
-	test_pairs = [[lines_lang1[i], lines_lang2[i]] for i in range(len(lines_lang1))]
 
 	# Reverse pairs, make Lang instances
 	if reverse:
 		pairs = [list(reversed(p)) for p in pairs]
-		test_pairs = [list(reversed(p)) for p in test_pairs]
-	lang = Lang(file_name, vocab_size)
 
-	print("Finished building Vocabularies.")
-	return lang, pairs, test_pairs
+	return pairs
 
 
 def indexesFromSentence(lang, sentence):
@@ -71,9 +61,8 @@ def variableFromSentence(lang, sentence, max_length, start=False):
 			indexes = indexes[0:max_length-1]
 		indexes.append(EOS_token)
 		indexes.extend([PAD_token] * (max_length - len(indexes)))
-
-	result = torch.LongTensor(indexes).to(DEVICE)
-	return result
+	indexes = torch.LongTensor(indexes).to(DEVICE)
+	return indexes
 
 def variablesFromPairs(lang, pairs, max_length, start=False):
 	res = []
@@ -82,3 +71,13 @@ def variablesFromPairs(lang, pairs, max_length, start=False):
 		target_variable = variableFromSentence(lang, pair[1], max_length, start)
 		res.append((input_variable, target_variable))
 	return res
+
+def tempFromPairs(lang, pairs, max_length, start=False):
+	x = torch.zeros([len(pairs[0]),max_length], dtype=torch.int64).to(DEVICE)
+	y = torch.zeros([len(pairs[0]),max_length], dtype=torch.int64).to(DEVICE)
+	for i in range(len(pairs[0])):
+		input_variable = variableFromSentence(lang, pairs[0][i], max_length, start)
+		target_variable = variableFromSentence(lang, pairs[1][i], max_length, start)
+		x[i,:] = input_variable
+		y[i,:] = target_variable
+	return x,y

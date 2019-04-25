@@ -20,7 +20,7 @@ for i in range(len(lines_lang1)):
 
 f.close()
 
-cmd = '--input=combined.txt --model_prefix=m --vocab_size=36000 --pad_id=2 --unk_id=3 --bos_id=0 --eos_id=1 --pad_piece=[PAD] --unk_piece=[UNK] --bos_piece=[BOS] --eos_piece=[EOS] --normalization_rule_name=nmt_nfkc_cf --model_type=bpe'
+cmd = '--input=combined.txt --model_prefix=m32 --vocab_size=32000 --pad_id=2 --unk_id=3 --bos_id=0 --eos_id=1 --pad_piece=[PAD] --unk_piece=[UNK] --bos_piece=[BOS] --eos_piece=[EOS] --normalization_rule_name=nmt_nfkc --model_type=bpe'
 spm.SentencePieceTrainer.train(cmd)
 
 

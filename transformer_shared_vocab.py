@@ -16,7 +16,8 @@ import copy
 import warnings
 from adabound import AdaBound
 import nltk
-import os, sys
+import os, sys, subprocess
+#import gc
 
 warnings.filterwarnings("ignore")
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -186,11 +187,12 @@ class Encoder(nn.Module):
 	def __init__(self, n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden):
 		super().__init__()
 		self.n_layers = n_layers
+		self.dropout = nn.Dropout(dropout_p)
 		self.pe = PositionalEncoder(n_hidden, max_length)
 		self.layers = get_clones(EncoderLayer(n_hidden, n_heads, dropout_p, n_ff_hidden), n_layers)
 		self.norm = Norm(n_hidden)
 	def forward(self, src, mask):
-		x = self.pe(src)
+		x = self.dropout(self.pe(src))
 		for i in range(self.n_layers):
 			x = self.layers[i](x, mask)
 		return self.norm(x)
@@ -200,11 +202,12 @@ class Decoder(nn.Module):
 	def __init__(self, n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden):
 		super().__init__()
 		self.n_layers = n_layers
+		self.dropout = nn.Dropout(dropout_p)
 		self.pe = PositionalEncoder(n_hidden, max_length)
 		self.layers = get_clones(DecoderLayer(n_hidden, n_heads, dropout_p, n_ff_hidden), n_layers)
 		self.norm = Norm(n_hidden)
 	def forward(self, trg, e_outputs, src_mask, trg_mask):
-		x = self.pe(trg)
+		x = self.dropout(self.pe(trg))
 		for i in range(self.n_layers):
 			x = self.layers[i](x, e_outputs, src_mask, trg_mask)
 		return self.norm(x)
@@ -235,7 +238,23 @@ def create_masks(batch_x, batch_y):
 	target_msk = target_msk & nopeak_mask
 	return source_msk, target_msk
 
-def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, lr, from_scratch):
+def cal_loss(pred, gold, smoothing=True):
+	''' Calculate cross entropy loss, apply label smoothing if needed. '''
+	gold = gold.contiguous().view(-1)
+	if smoothing:
+		eps = 0.1
+		n_class = pred.size(1)
+		one_hot = torch.zeros_like(pred).scatter(1, gold.view(-1, 1), 1)
+		one_hot = one_hot * (1 - eps) + (1 - one_hot) * eps / (n_class - 1)
+		log_prb = F.log_softmax(pred, dim=1)
+		non_pad_mask = gold.ne(PAD_token)
+		loss = -(one_hot * log_prb).sum(dim=1)
+		loss = loss.masked_select(non_pad_mask).mean()  # average later
+	else:
+		loss = F.cross_entropy(pred, gold, ignore_index=PAD_token)
+	return loss
+
+def train(model, n_epochs, train_loader, ext_loader, test_loader, target_lang, max_length, lr, from_scratch):
 	start = time.time()
 			
 	#optimizer = torch.optim.Adam(model.parameters(), lr=lr, betas=(0.9, 0.98), eps=1e-9)
@@ -245,11 +264,14 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 		os.mkdir(SAVE_PATH)
 	save_file = os.path.join(SAVE_PATH, SAVE_NAME)
 
+	step = 0.0
+
 	if not from_scratch:
 		if os.path.exists(save_file):
 			checkpoint = torch.load(save_file)
 			model.load_state_dict(checkpoint['model_state_dict'])
 			lr = checkpoint['lr']
+			step = checkpoint['step']
 			optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 			for param_group in optimizer.param_groups:
 				param_group['lr'] = lr
@@ -257,36 +279,56 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 			checkpoint = []
 		else:
 			print("load unsuccessful!")
-	step = 0.0
 	best_val_bleu = 0
+	ext_iter = iter(ext_loader)
 	for epoch in range(n_epochs):
 
 		model.train()
-		print_loss_total = 0
+		print_loss_total = 0.0
 
 		for batch_x, batch_y in train_loader:
-			
+
 			targets_y = batch_y[:, 1:].contiguous().view(-1)
 			inputs_y = batch_y[:, :-1]
 			src_mask, trg_mask = create_masks(batch_x, inputs_y)
 			preds = model(batch_x, inputs_y, src_mask, trg_mask)
-
 			optimizer.zero_grad()
-			loss = F.cross_entropy(preds.view(-1, preds.size(-1)),
-						targets_y, ignore_index=PAD_token)		
-			print_loss_total += loss
+			loss = cal_loss(preds.view(-1, preds.size(-1)), targets_y)		
+			print_loss_total += float(loss)
 			loss.backward()
 			optimizer.step()
-			step = step + 0.5
+
+			
+			try:
+				ext_data = next(ext_iter) 
+			except StopIteration:
+				# StopIteration is thrown if dataset ends
+ 				# reinitialize data loader 
+				ext_iter = iter(ext_loader)
+				ext_data = next(ext_iter)
+			batch_x, batch_y = tempFromPairs(lang, ext_data, MAX_LENGTH, start=True)
+			targets_y = batch_y[:, 1:].contiguous().view(-1)
+			inputs_y = batch_y[:, :-1]
+			src_mask, trg_mask = create_masks(batch_x, inputs_y)
+			preds = model(batch_x, inputs_y, src_mask, trg_mask)
+			optimizer.zero_grad()
+			loss = cal_loss(preds.view(-1, preds.size(-1)), targets_y)		
+			print_loss_total += float(loss)
+			loss.backward()
+			optimizer.step()
+
+			#gc.collect()
+			step = step + STEP_ADD
 			lr = min([step**(-0.5), step/(warmup_steps**1.5)]) / (n_hidden**0.5)
 			for param_group in optimizer.param_groups:
 				param_group['lr'] = lr
-
 		print('%s (epoch: %d %d%%)' % (timeSince(start, (epoch+1)/n_epochs),
 					epoch, (epoch+1)/n_epochs*100))
-		print('total loss: %f'%(float(print_loss_total)))
+		print('total loss: %f'%(print_loss_total))
 		model.eval()
 		curr_bleu = evaluate(model, test_loader, target_lang, max_length)
+		#gc.collect()
+		
 
 		if curr_bleu > best_val_bleu:
 			best_val_bleu = curr_bleu
@@ -294,6 +336,7 @@ def train(model, n_epochs, train_loader, test_loader, target_lang, max_length, l
 									'model_state_dict': model.state_dict(),
 									'optimizer_state_dict': optimizer.state_dict(),
 									'lr': lr,
+									'step': step,
 									}, save_file)
 			print("checkpoint saved!")
 		print()
@@ -302,6 +345,12 @@ def evaluate(model, loader, lang, max_length):
 
 	total = 0
 	score = 0.0
+
+	trans_file = "out.dev"
+	if os.path.exists(trans_file):
+		os.remove(trans_file)
+	f = open(trans_file, "w+")
+
 	for batch_x, batch_y in loader:
 
 		batch_size = batch_x.size()[0]
@@ -327,43 +376,71 @@ def evaluate(model, loader, lang, max_length):
 					sent.append(int(word))
 				if word == EOS_token:
 					break
-			y = [int(word) for word in batch_y[b] if word not in ignore]
+			#y = [int(word) for word in batch_y[b] if word not in ignore]
+			#sent = nltk.word_tokenize(lang.decodeSentence(sent))
+			#y = [nltk.word_tokenize(lang.decodeSentence(y))]
+			#score += sentence_bleu(y, sent)
+			#total += 1
+
 			sent = nltk.word_tokenize(lang.decodeSentence(sent))
-			y = [nltk.word_tokenize(lang.decodeSentence(y))]
-			score += sentence_bleu(y, sent)
-			total += 1
-	print('Test BLEU score '+str(score/total))
-	return score/total
+			sent = "".join([token+" " for token in sent])
+			f.write(sent[:-1])
+			f.write('\n')
+			
+	f.close()
+	out = subprocess.check_output(["bash", "./compute_bleu.sh"], close_fds=True)
+	out = str(out).split(' ')
+	bleu = out[2]
+	print('Test BLEU score '+bleu)
+	return float(bleu)
 
 
 SOS_token = 0
 EOS_token = 1
 PAD_token = 2
 UNK_token = 3
-vocab_size = 36000
-MAX_LENGTH = 100
+vocab_size = 32000
+MAX_LENGTH = 120
+STEP_ADD = 1
 n_hidden = 512
 n_ff_hidden = 2048
 n_heads = 8
-n_layers = 6
-dropout_p = 0.2
+n_layers = 4
+dropout_p = 0.1
 n_epochs = 50
-lr = 2e-4
+lr = 1e-4
 batch_size = 32
+
 from_scratch = True
 warmup_steps = 4000
 SAVE_PATH = 'checkpoints'
-SAVE_NAME = 'transformer_shared.pkl'
+SAVE_NAME = 'transformer_shared_with_extra-32k.pkl'
 
-lang, pairs, test_pairs = readLangs('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', 'iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', 'm.model', vocab_size, reverse=False)
-#pairs = pairs[0:10]
-test_pairs = test_pairs[1:3000]
+pairs = readLangs('iwslt16_en_de/train.en', 'iwslt16_en_de/train.de', reverse=True)
+test_pairs = readLangs('iwslt16_en_de/dev.en', 'iwslt16_en_de/dev.de', reverse=True)
+ext_pairs = readLangs('de-en/europarl-v7.de-en.en', 'de-en/europarl-v7.de-en.de', reverse=True)
+lang = Lang('m32.model', vocab_size)
+#pairs = pairs[0:2000]
+#test_pairs = test_pairs[0:3000]
+#ext_pairs = ext_pairs[1:1500000]
+file_name = "en.dev"
+if os.path.exists(file_name):
+	os.remove(file_name)
+f = open(file_name,"w+")
+for i in range(len(test_pairs)):
+	f.write(test_pairs[i][1])
+	f.write('\n')
+f.close()
+
 pairs = variablesFromPairs(lang, pairs, MAX_LENGTH, start=True)
 test_pairs = variablesFromPairs(lang, test_pairs, MAX_LENGTH, start=True)
 train_loader = torch.utils.data.DataLoader(pairs, 
 	batch_size=batch_size, shuffle=True)
+ext_loader = torch.utils.data.DataLoader(ext_pairs, 
+	batch_size=batch_size, shuffle=True)
 test_loader = torch.utils.data.DataLoader(test_pairs, 
 	batch_size=batch_size, shuffle=False)
+print("Finished loading data.")
 
 model = Transformer_shared(lang.size, n_hidden, n_layers, n_heads, dropout_p, MAX_LENGTH, n_ff_hidden).to(DEVICE)
 
@@ -373,5 +450,5 @@ for p in model.parameters():
 
 print('Training starts.')
 
-train(model, n_epochs, train_loader, test_loader, lang, MAX_LENGTH, lr, from_scratch)
+train(model, n_epochs, train_loader, ext_loader, test_loader, lang, MAX_LENGTH, lr, from_scratch)
 
