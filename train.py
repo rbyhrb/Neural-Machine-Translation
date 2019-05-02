@@ -225,8 +225,7 @@ def train(model, test_loader, lang, args, pairs, extra_loader):
 		print('total loss: %f'%(print_loss_total))
 		model.eval()
 		curr_bleu = evaluate(model, test_loader, lang, args.max_length)
-		print('%s (epoch: %d %d%%)' % (timeSince(start, (epoch+1)/n_epochs),
-					epoch, (epoch+1)/(n_epochs-begin_epoch)*100))
+		print('%s (epoch: %d %d%%)' % (timeSince(start, (epoch+1-begin_epoch)/(n_epochs-begin_epoch)), epoch, (epoch+1-begin_epoch)/(n_epochs-begin_epoch)*100))
 
 		if curr_bleu > best_val_bleu:
 			best_val_bleu = curr_bleu
