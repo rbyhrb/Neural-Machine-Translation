@@ -251,11 +251,11 @@ def test(model, test_loader, lang, args):
 	if os.path.exists(save_file):
 		checkpoint = torch.load(save_file)
 		model.load_state_dict(checkpoint['model_state_dict'])
-		checkpoint = []
 		print("loaded model from "+save_file)
 		print("greedy search BLEU score: %.1f" %(checkpoint['bleu']))
+		checkpoint = []
 	else:
-		print("no file found")
+		print("no model file found")
 		exit(0)
 
 	model.eval()
@@ -266,7 +266,7 @@ def test(model, test_loader, lang, args):
 
 
 # Beam search
-def beamEval(model, loader, lang):
+def beamEval(model, loader, lang, args):
 	max_length = args.max_length
 	beam_width = args.beam_width
 	rp = args.rp
