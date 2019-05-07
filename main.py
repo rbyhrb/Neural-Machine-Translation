@@ -112,7 +112,7 @@ def main():
 	lang = Lang(model_name+".model", args.vocab_size*1000)
 	pairs = readLangs(args.train_a_1, args.train_a_2)
 	test_pairs = readLangs(args.test_1, args.test_2)
-	#pairs = pairs[0:10]
+	#pairs = pairs[0:100]
 	if args.use_dataset_B:
 		if args.ratio <= 2:
 			batch_size = int(args.batch_size*args.ratio)
@@ -138,11 +138,14 @@ def main():
 	test_loader = Data.DataLoader(test_pairs, batch_size=args.batch_size, shuffle=False)
 	print("Finished loading data.")
 
-
+	if args.model == "normal":
+		bi = False
+	else:
+		bi = True
 
 	# Setting up the model
 	model = Transformer(lang.size, args.d_model, args.n_layers, args.n_heads,
-					args.dropout_p, args.max_length, args.n_ff_hidden).to(DEVICE)
+					args.dropout_p, args.max_length, args.n_ff_hidden, bi=bi).to(DEVICE)
 	for p in model.parameters():
 		if p.dim() > 1:
 			nn.init.xavier_uniform_(p)

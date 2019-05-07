@@ -74,7 +74,7 @@ def print_model(args):
 	print("maximum sequence lenghth: %d"%(args.max_length))
 	print("model dimension: %d"%(args.d_model))
 	print("number of heads: %d"%(args.n_heads))
-	print("number of hidden units if feadforward layers: %d"%(args.n_ff_hidden))
+	print("number of hidden units in feadforward layers: %d"%(args.n_ff_hidden))
 	print("number of layers: %d"%(args.n_layers))
 	print("dropout rate: %.1f"%(args.dropout_p))
 	print("vocabulary size: %dk"%(args.vocab_size))
@@ -150,78 +150,19 @@ def train(model, test_loader, lang, args, pairs, extra_loader):
 		num_iter = 1
 		if args.ratio >= 2:
 			num_iter = int(args.ratio)
+	else:
+		extra_iter = None
+		num_iter = 0
 
 	for epoch in range(begin_epoch ,n_epochs):
 
 		model.train()
-		print_loss_total = 0.0
-		if args.unigram_sampling:
-			v_pairs = variablesFromPairs(lang, pairs, args.max_length, start=True, sample=True)
-		else:
-			v_pairs = variablesFromPairs(lang, pairs, args.max_length, start=True)
-		train_loader = Data.DataLoader(v_pairs, batch_size=args.batch_size, shuffle=True)
 
-		for batch_x, batch_y in train_loader:
-			if args.use_dataset_A:
-				targets_y = batch_y[:, 1:].contiguous().view(-1)
-				inputs_y = batch_y[:, :-1]
-				src_mask, trg_mask = create_masks(batch_x, inputs_y)
-				preds = model(batch_x, inputs_y, src_mask, trg_mask)
-				optimizer.zero_grad()
-				loss = cal_loss(preds.view(-1, preds.size(-1)), targets_y)		
-				print_loss_total += float(loss)
-				loss.backward()
-				optimizer.step()
-				
-				if args.model == "bidirectional":
-					targets_x = batch_x[:, 1:].contiguous().view(-1)
-					inputs_x = batch_x[:, :-1]
-					src_mask, trg_mask = create_masks(batch_y, inputs_x)
-					preds = model(batch_y, inputs_x, src_mask, trg_mask, reverse=True)
-					optimizer.zero_grad()
-					loss = cal_loss(preds.view(-1, preds.size(-1)), targets_x)		
-					print_loss_total += float(loss)
-					loss.backward()
-					optimizer.step()
+		train_loader = Data.DataLoader(pairs, batch_size=args.batch_size, shuffle=True)
 
-			if args.use_dataset_B:
-				for n_i in range(num_iter):
-					try:
-						extra_data = next(extra_iter) 
-					except StopIteration:
-						extra_iter = iter(extra_loader)
-						extra_data = next(extra_iter)
-					if args.unigram_sampling:
-						batch_x, batch_y = tempFromPairs(lang, extra_data,
-															args.max_length, start=True, sample=True)
-					else:
-						batch_x, batch_y = tempFromPairs(lang, extra_data,
-															args.max_length, start=True)
-					targets_y = batch_y[:, 1:].contiguous().view(-1)
-					inputs_y = batch_y[:, :-1]
-					src_mask, trg_mask = create_masks(batch_x, inputs_y)
-					preds = model(batch_x, inputs_y, src_mask, trg_mask)
-					optimizer.zero_grad()
-					loss = cal_loss(preds.view(-1, preds.size(-1)), targets_y)		
-					print_loss_total += float(loss)
-					loss.backward()
-					optimizer.step()
-
-					if args.model == "bidirectional":
-						targets_x = batch_x[:, 1:].contiguous().view(-1)
-						inputs_x = batch_x[:, :-1]
-						src_mask, trg_mask = create_masks(batch_y, inputs_x)
-						preds = model(batch_y, inputs_x, src_mask, trg_mask, reverse=True)
-						optimizer.zero_grad()
-						loss = cal_loss(preds.view(-1, preds.size(-1)), targets_x)		
-						print_loss_total += float(loss)
-						loss.backward()
-						optimizer.step()
+		print_loss_total, step, extra_iter, lr = train_epoch(model, lang, args, train_loader, 
+															extra_loader, extra_iter, num_iter, optimizer, step)
 			
-			step = step + args.step_add
-			lr = min([step**(-0.5), step/(args.warmup_steps**1.5)]) / (args.d_model**0.5)
-			for param_group in optimizer.param_groups:
-				param_group['lr'] = lr
 		print('total loss: %f'%(print_loss_total))
 		model.eval()
 		curr_bleu = evaluate(model, test_loader, lang, args.max_length)
@@ -240,7 +181,72 @@ def train(model, test_loader, lang, args, pairs, extra_loader):
 			print("checkpoint saved!")
 		print()
 
+def step_forward(model, optimizer, batch_x, batch_y):
+	targets_y = batch_y[:, 1:].contiguous().view(-1)
+	inputs_y = batch_y[:, :-1]
+	src_mask, trg_mask = create_masks(batch_x, inputs_y)
+	preds = model(batch_x, inputs_y, src_mask, trg_mask)
+	optimizer.zero_grad()
+	loss = cal_loss(preds.view(-1, preds.size(-1)), targets_y)
+	loss.backward()
+	optimizer.step()
+	return float(loss)
 
+def step_reverse(model, optimizer, batch_x, batch_y):
+	targets_x = batch_x[:, 1:].contiguous().view(-1)
+	inputs_x = batch_x[:, :-1]
+	src_mask, trg_mask = create_masks(batch_y, inputs_x)
+	preds = model(batch_y, inputs_x, src_mask, trg_mask, reverse=True)
+	optimizer.zero_grad()
+	loss = cal_loss(preds.view(-1, preds.size(-1)), targets_x)
+	loss.backward()
+	optimizer.step()
+	return float(loss)
+
+def train_epoch(model, lang, args, train_loader, extra_loader, extra_iter, num_iter, optimizer, step):
+	print_loss_total = 0.0
+	for pair in train_loader:
+		if args.use_dataset_A:
+			if args.unigram_sampling:
+				batch_x, batch_y = tempFromPairs(lang, pair,
+														args.max_length, start=True, sample=True)
+			else:
+				batch_x, batch_y = tempFromPairs(lang, pair,
+														args.max_length, start=True)
+			
+			loss = step_forward(model, optimizer, batch_x, batch_y)
+			print_loss_total += loss
+					
+			if args.model == "bidirectional":
+				loss = step_reverse(model, optimizer, batch_x, batch_y)
+				print_loss_total += float(loss)
+
+		if args.use_dataset_B:
+			for n_i in range(num_iter):
+				try:
+					extra_data = next(extra_iter) 
+				except StopIteration:
+					extra_iter = iter(extra_loader)
+					extra_data = next(extra_iter)
+				if args.unigram_sampling:
+					batch_x, batch_y = tempFromPairs(lang, extra_data,
+														args.max_length, start=True, sample=True)
+				else:
+					batch_x, batch_y = tempFromPairs(lang, extra_data,
+														args.max_length, start=True)
+				loss = step_forward(model, optimizer, batch_x, batch_y)
+				print_loss_total += loss
+
+				if args.model == "bidirectional":
+					loss = step_reverse(model, optimizer, batch_x, batch_y)
+					print_loss_total += float(loss)
+
+		step = step + args.step_add
+		lr = min([step**(-0.5), step/(args.warmup_steps**1.5)]) / (args.d_model**0.5)
+		for param_group in optimizer.param_groups:
+			param_group['lr'] = lr
+
+	return print_loss_total, step, extra_iter, lr
 
 # --------------------------------Testing--------------------------------
 

@@ -117,18 +117,21 @@ class Norm(nn.Module):
 
 
 class DecoderLayer(nn.Module):
-	def __init__(self, n_hidden, n_heads, dropout_p, n_ff_hidden):
+	def __init__(self, n_hidden, n_heads, dropout_p, n_ff_hidden, bi=True):
 		super().__init__()
 		self.norm_1 = Norm(n_hidden)
 		self.norm_2 = Norm(n_hidden)
 		self.norm_3 = Norm(n_hidden)
 		
 		self.dropout_1 = nn.Dropout(dropout_p)
-		self.dropout_2 = nn.Dropout(dropout_p)
 		self.dropout_3 = nn.Dropout(dropout_p)
 		
 		self.attn_1 = MultiHeadAttention(n_heads, n_hidden, dropout_p)
-		self.attn_2 = MultiHeadAttention(n_heads, n_hidden, dropout_p)
+
+		if bi:
+			self.attn_2 = MultiHeadAttention(n_heads, n_hidden, dropout_p)
+			self.dropout_2 = nn.Dropout(dropout_p)
+			self.norm_3 = Norm(n_hidden)
 
 		self.ff = FeedForward(n_hidden, n_ff_hidden, dropout_p)
 
@@ -146,12 +149,12 @@ def get_clones(module, N):
 	return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 class Decoder(nn.Module):
-	def __init__(self, n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden):
+	def __init__(self, n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden, bi=True):
 		super().__init__()
 		self.n_layers = n_layers
 		self.dropout = nn.Dropout(dropout_p)
 		self.pe = PositionalEncoder(n_hidden, max_length)
-		self.layers = get_clones(DecoderLayer(n_hidden, n_heads, dropout_p, n_ff_hidden), n_layers)
+		self.layers = get_clones(DecoderLayer(n_hidden, n_heads, dropout_p, n_ff_hidden, bi=bi), n_layers)
 		self.norm = Norm(n_hidden)
 	def forward(self, trg, trg_mask, e_outputs=None, src_mask=None):
 		x = self.dropout(self.pe(trg))
@@ -162,10 +165,10 @@ class Decoder(nn.Module):
 
 
 class Transformer(nn.Module):
-	def __init__(self, vocab_size, n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden):
+	def __init__(self, vocab_size, n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden, bi=True):
 		super().__init__()
 		self.embed = Embedder(vocab_size, n_hidden)
-		self.encoder = Decoder(n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden)
+		self.encoder = Decoder(n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden, bi=bi)
 		self.decoder = Decoder(n_hidden, n_layers, n_heads, dropout_p, max_length, n_ff_hidden)
 		self.out_rev = nn.Linear(n_hidden, vocab_size)
 		self.out = nn.Linear(n_hidden, vocab_size)

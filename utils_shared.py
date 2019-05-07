@@ -22,7 +22,7 @@ class Lang:
 		return self.sp.encode_as_ids(sentence)
 
 	def sampleSentence(self, sentence):
-		return self.sp.sample_encode_as_ids(sentence, 10, 0.1)
+		return self.sp.sample_encode_as_ids(sentence, 20, 0.1)
 
 	def decodeSentence(self, codes):
 		return self.sp.decode_ids(codes)
