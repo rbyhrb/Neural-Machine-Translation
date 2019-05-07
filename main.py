@@ -112,9 +112,9 @@ def main():
 	lang = Lang(model_name+".model", args.vocab_size*1000)
 	pairs = readLangs(args.train_a_1, args.train_a_2)
 	test_pairs = readLangs(args.test_1, args.test_2)
-	#pairs = pairs[0:100]
+	#pairs = pairs[0:160]
 	if args.use_dataset_B:
-		if args.ratio <= 2:
+		if args.ratio < 2:
 			batch_size = int(args.batch_size*args.ratio)
 		else:
 			batch_size = args.batch_size
