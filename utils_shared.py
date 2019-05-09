@@ -28,22 +28,27 @@ class Lang:
 		return self.sp.decode_ids(codes)
 
 
-def readLangs(lang1, lang2, reverse=False):
+def readLangs(lang1, lang2=None, reverse=False):
 	print("Reading lines...")
 
-	# Read the files and split into lines
-	lines_lang1 = open('%s' % (lang1), encoding='utf-8').\
-		read().strip().split('\n')
-	lines_lang2 = open('%s' % (lang2), encoding='utf-8').\
-		read().strip().split('\n')
-	# Split every line into pairs and normalize
-	pairs = []
-	pairs = [[lines_lang1[i], lines_lang2[i]] for i in range(len(lines_lang1))]
+	if lang2 is not None:
+		# Read the files and split into lines
+		lines_lang1 = open('%s' % (lang1), encoding='utf-8').\
+			read().strip().split('\n')
+		lines_lang2 = open('%s' % (lang2), encoding='utf-8').\
+			read().strip().split('\n')
+		# Split every line into pairs and normalize
+		pairs = []
+		pairs = [[lines_lang1[i], lines_lang2[i]] for i in range(len(lines_lang1))]
 
 
-	# Reverse pairs, make Lang instances
-	if reverse:
-		pairs = [list(reversed(p)) for p in pairs]
+		# Reverse pairs, make Lang instances
+		if reverse:
+			pairs = [list(reversed(p)) for p in pairs]
+	else:
+		lines_lang1 = open('%s' % (lang1), encoding='utf-8').\
+			read().strip().split('\n')
+		pairs = [[lines_lang1[i],"None"] for i in range(len(lines_lang1))]
 
 	return pairs
 

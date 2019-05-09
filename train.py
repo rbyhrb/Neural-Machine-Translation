@@ -24,6 +24,7 @@ import nltk
 import os, sys, subprocess
 from queue import PriorityQueue
 from transformer_model import *
+#import gc
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 nltk.download('punkt')
@@ -219,7 +220,7 @@ def train_epoch(model, lang, args, train_loader, extra_loader, extra_iter, num_i
 					
 			if args.model == "bidirectional":
 				loss = step_reverse(model, optimizer, batch_x, batch_y)
-				print_loss_total += float(loss)
+				print_loss_total += loss
 
 		if args.use_dataset_B:
 			for n_i in range(num_iter):
@@ -234,12 +235,15 @@ def train_epoch(model, lang, args, train_loader, extra_loader, extra_iter, num_i
 				else:
 					batch_x, batch_y = tempFromPairs(lang, extra_data,
 														args.max_length, start=True)
+
 				loss = step_forward(model, optimizer, batch_x, batch_y)
 				print_loss_total += loss
 
+				
 				if args.model == "bidirectional":
 					loss = step_reverse(model, optimizer, batch_x, batch_y)
-					print_loss_total += float(loss)
+					print_loss_total += loss
+				
 
 		step = step + args.step_add
 		lr = min([step**(-0.5), step/(args.warmup_steps**1.5)]) / (args.d_model**0.5)
@@ -250,7 +254,7 @@ def train_epoch(model, lang, args, train_loader, extra_loader, extra_iter, num_i
 
 # --------------------------------Testing--------------------------------
 
-def test(model, test_loader, lang, args):
+def test(model, test_loader, lang, args, trans_file="out.dev", gen=False):
 	start = time.time()
 
 	save_file = get_name(args)
@@ -266,19 +270,18 @@ def test(model, test_loader, lang, args):
 
 	model.eval()
 	print_beam(args)
-	curr_bleu = beamEval(model, test_loader, lang, args)
+	beamEval(model, test_loader, lang, args, trans_file, gen)
 	print(timeDiff(start))
 
 
 
 # Beam search
-def beamEval(model, loader, lang, args):
+def beamEval(model, loader, lang, args, trans_file="out.dev", gen=False):
 	max_length = args.max_length
 	beam_width = args.beam_width
 	rp = args.rp
 	rpl = args.rpl
 	mc = args.mc
-	trans_file = "out.dev"
 	if os.path.exists(trans_file):
 		os.remove(trans_file)
 	f = open(trans_file, "w+")
@@ -359,11 +362,11 @@ def beamEval(model, loader, lang, args):
 			f.write('\n')
 			
 	f.close()
-	out = subprocess.check_output(["bash", "./compute_bleu.sh"], close_fds=True)
-	out = str(out).split(' ')
-	bleu = out[2]
-	print('Test BLEU score '+bleu)
-	return float(bleu)
+	if not gen:
+		out = subprocess.check_output(["bash", "./compute_bleu.sh"], close_fds=True)
+		out = str(out).split(' ')
+		bleu = out[2]
+		print('Test BLEU score '+bleu)
 
 
 

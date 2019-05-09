@@ -36,7 +36,7 @@ parser.add_argument('--model', dest='model', default='normal', help='Choose betw
 # ----------------------------Training pamrameters----------------------------
 parser.add_argument('--batch_size', dest='batch_size', type=int, default=32, help='Batch size.')
 parser.add_argument('--optimizer', dest='optimizer', default='adabound', help='Choose between adabound and adam.')
-parser.add_argument('--phase', dest='phase', default='train', help='Choose between train or test')
+parser.add_argument('--phase', dest='phase', default='train', help='Choose between train, test or gen')
 parser.add_argument('--n_epochs', dest='n_epochs', type=int, default=30, help='Number of epochs.')
 parser.add_argument('--warmup_steps', dest='warmup_steps', type=int, default=4000, help='Warmup steps in the learning rate allocator.')
 parser.add_argument('--step_add', dest='step_add', type=float, default=1.0, help='Step incrementation in the learning rate allocator.')
@@ -70,6 +70,7 @@ parser.add_argument('--mc', dest='mc', type=int, default=3, help='Maximum candid
 # -----------------------------Dataset locations-----------------------------
 parser.add_argument('--train_a_1', dest='train_a_1', default='iwslt16_en_de/train.de', help='Training set A language 1.')
 parser.add_argument('--train_a_2', dest='train_a_2', default='iwslt16_en_de/train.en', help='Training set A language 2.')
+parser.add_argument('--gen', dest='gen', default='iwslt16_en_de/test.de', help='The real test set with on ground truth.')
 parser.add_argument('--train_b_1', dest='train_b_1', default='de-en/europarl-v7.de-en.de', help='Training set B language 1.')
 parser.add_argument('--train_b_2', dest='train_b_2', default='de-en/europarl-v7.de-en.en', help='Training set B language 2.')
 parser.add_argument('--test_1', dest='test_1', default='iwslt16_en_de/dev.de', help='Test set language 1.')
@@ -154,7 +155,14 @@ def main():
 	# Training and testing
 	if args.phase == "train":
 		train(model, test_loader, lang, args, pairs, extra_loader)
-	test(model, test_loader, lang, args)
+	elif args.phase == "test":
+		test(model, test_loader, lang, args)
+	else:
+		gen_pairs = readLangs(args.gen)
+		#gen_pairs = gen_pairs[0:10]
+		gen_pairs = variablesFromPairs(lang, gen_pairs, args.max_length, start=True)
+		gen_loader = Data.DataLoader(gen_pairs, batch_size=args.batch_size, shuffle=False)
+		test(model, gen_loader, lang, args, trans_file="test_out.de", gen=True)
 	
 
 if __name__ == '__main__':
